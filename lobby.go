@@ -6,15 +6,19 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"time"
 )
 
 const MaxPlayerSlots = 8
+const countDownTimer = 2
+var SelectedCourse = 0
 
 type Client struct {
 	Conn     net.Conn
 	Username string
 	Slot int
-	IsPlayer bool
+	IsPlayer bool // Observer if false
+	Ready bool
 }
 
 type Lobby struct {
@@ -61,6 +65,7 @@ func Join(conn net.Conn, username string) {
 
 	client.Conn = conn
 	client.Username = username
+	client.Ready = false
 	
 	// Max slots, assign observer role
 	if GLobby.PlayerCount >= MaxPlayerSlots {
@@ -91,6 +96,46 @@ func Join(conn net.Conn, username string) {
 
 	// Notify all clients about the new client
 	NotifyClients()
+}
+
+func SelectCharacter() {
+
+}
+
+func VoteForCourse(conn net.Conn, value string) {
+	SelectedCourse
+}
+
+func ReadyUp(conn net.Conn, value string) {
+	if GLobby.Clients[conn].IsPlayer {
+		if (value == "true") {
+			GLobby.Clients[conn].Ready = true
+		} else {
+			GLobby.Clients[conn].Ready = false
+		}
+
+		var count int = 0
+		for _, client := range GLobby.Clients {
+			if client.IsPlayer {
+				if client.Ready {
+					count++;
+				}
+			}
+		}
+		if count == MaxPlayerSlots {
+			StartCountdown()
+		}
+	}
+}
+
+func StartCountdown() {
+	timer := time.NewTimer(countDownTimer * time.Second)
+	<-timer.C
+	StartGame()
+}
+
+func StartGame() {
+	// Send packet to load the course
 }
 
 func Leave(conn net.Conn) {
