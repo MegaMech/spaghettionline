@@ -66,6 +66,7 @@ func startUDPServer(port string) {
 
 func HandleTCPMessage(conn net.Conn) {
 	defer conn.Close()
+
 	fmt.Println("New connection established!")
 
 	reader := bufio.NewReader(conn)

@@ -4,6 +4,7 @@ const (
 	JoinPacket = iota
 	LeavePacket
 	MessagePacket
+	LoadedPacket
 	PlayerPacket
 	ActorPacket
 	ObjectPacket
