@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"io"
-	"bufio"
 	"net"
 	"strings"
 	"sync"
@@ -14,6 +13,7 @@ import (
 const MaxPlayerSlots = 8
 const countDownTimer = 2
 const lockInTimer = 3 // Players are locked in with their choices
+var LockedIn = false
 var SelectedCourse = 0
 
 type Client struct {
@@ -27,13 +27,27 @@ type Client struct {
 	Loaded bool
 }
 
+type NetworkClient struct { // For sending to the clients
+	Username string
+	Slot int
+	IsPlayer bool
+	IsAI bool
+	Character int
+	/* Does the client own this client?
+	 * This is important so that the client knows which player it is controlling
+	 * The client should always be using gPlayerOne. However, this is needed to know where to place everyone
+	 * on the starting line.
+	 */
+	HasAuthority bool
+}
+
 type Lobby struct {
 	Clients map[net.Conn]*Client
 	VacantSlots []int // Slots that were occupied but are now vacant
 	Mutex   sync.Mutex
 	PlayerCount int
 	UniqueCharacters bool
-	StartGame bool
+	StartSession bool
 }
 
 var GLobby = Lobby{
@@ -41,7 +55,7 @@ var GLobby = Lobby{
 	VacantSlots: make([]int, 0),
 	PlayerCount: 0,
 	UniqueCharacters: false,
-	StartGame: false,
+	StartSession: false,
 }
 
 func CreateString(r io.Reader) (string, error) {
@@ -65,14 +79,19 @@ func CreateString(r io.Reader) (string, error) {
 func Join(conn net.Conn, username string) {
 	GLobby.Mutex.Lock()
 	defer GLobby.Mutex.Unlock()
+
+	// Too late, the game is already starting
+	if (LockedIn) {
+		return
+	}
 	
 	if _, exists := GLobby.Clients[conn]; exists {
 		fmt.Println("Client already exists")
 		return
 	}
 
-	if username == "" {
-		fmt.Println("Invalid username")
+	if username == "" || !isValidUsername(username) {
+		fmt.Println("Invalid username: ", username)
 		return
 	}
 
@@ -112,21 +131,23 @@ func Join(conn net.Conn, username string) {
 
 }
 
-func SelectCharacter(conn net.Conn, value int) {
+func SetCharacter(conn net.Conn, value []byte) {
 	if GLobby.Clients[conn].IsPlayer {
+		character := int(value[0])
+
 		if GLobby.UniqueCharacters {
 			for _, client := range GLobby.Clients {
 				if client.Conn == conn {
 					continue // Skip self
 				}
-				if client.Character == value {
-					SendStringTCP(client, "This character has already been chosen")
+				if client.Character == character {
+					SendMessageToPlayer(client, "This character has already been chosen")
 					return
 				}
 			}
-			GLobby.Clients[conn].Character = value
+			GLobby.Clients[conn].Character = character
 		} else { // Players can choose the same characters
-			GLobby.Clients[conn].Character = value
+			GLobby.Clients[conn].Character = character
 		}
 	}
 }
@@ -137,23 +158,27 @@ func CourseVote(conn net.Conn, value int) {
 	}
 }
 
-func ReadyUp(conn net.Conn, value bool) {
+func ReadyUp(conn net.Conn, value []byte) {
 	if GLobby.Clients[conn].IsPlayer {
-		if (value == true) {
+
+		if value[0] == 1 {
 			GLobby.Clients[conn].Ready = true
 		} else {
 			GLobby.Clients[conn].Ready = false
 		}
 
 		var count int = 0
+		var currentPlayers int = 0
 		for _, client := range GLobby.Clients {
 			if client.IsPlayer {
 				if client.Ready {
 					count++;
 				}
+				currentPlayers++
 			}
 		}
-		if count == (MaxPlayerSlots / 2) {
+		//if count == (currentPlayers / 2) {
+		if count > 0 { // <-- Debug. Real ^
 			StartCountdown()
 		}
 	}
@@ -161,16 +186,21 @@ func ReadyUp(conn net.Conn, value bool) {
 
 func StartCountdown() {
 	timer := time.NewTimer(countDownTimer * time.Second)
+	fmt.Printf("Starting countdown %ds\n", countDownTimer);
 	<-timer.C
 
+	LockedIn = true
+	fmt.Printf("Final countdown %ds\n", lockInTimer);
+	
 	timer2 := time.NewTimer(lockInTimer * time.Second)
-	SelectedCourse = SelectCourse()
-	SetPlayerType();
+	SelectCourse()
+	BroadcastPlayerSlots();
 	<-timer2.C
-	GLobby.StartGame = true
+	GLobby.StartSession = true
+	BroadcastPacket(StartSessionPacket)
 }
 
-func SelectCourse() (int) {
+func SelectCourse() {
 	votes := make(map[int]int)
 	// Select course
 	for _, client := range GLobby.Clients {
@@ -194,24 +224,21 @@ func SelectCourse() (int) {
 	// Randomly choose from tied courses if there are multiple with the same max count
 	rand.Seed(time.Now().UnixNano())
 	selectedCourse := maxCourses[rand.Intn(len(maxCourses))]
-	fmt.Printf("Selected course: %d\n", selectedCourse)
-	return selectedCourse
+	BroadcastSelectedCourse(selectedCourse)
 }
 
+// Player has finished loading
 func Loaded(conn net.Conn) {
 	GLobby.Clients[conn].Loaded = true
 
 	for _, client := range GLobby.Clients {
+		// Return if not all clients are done loading. Including observers
 		if (client.Loaded == false) {
 			return
 		}
 	}
 	// Start Game
 	BroadcastPacket(LoadedPacket)
-}
-
-func LoadGame() {
-	// Send packet to load the course
 }
 
 func Leave(conn net.Conn) {
@@ -226,14 +253,14 @@ func Leave(conn net.Conn) {
 	
 	// Find and remove slot
 	if client.IsPlayer {
-		message := fmt.Sprintf("%s left, freeing slot %d\n", client.Username, client.Slot + 1)
+		message := fmt.Sprintf("%s left, freeing slot %d", client.Username, client.Slot + 1)
 		GLobby.VacantSlots = append(GLobby.VacantSlots, client.Slot)
 		GLobby.PlayerCount--
 		//fmt.Printf("%s left, freeing slot %d\n", client.Username, client.Slot + 1)
-		BroadcastMessageTCP(GLobby.Clients[conn], message);
+		BroadcastStringTCP(message);
 	} else {
 		message := fmt.Sprintf("Observer %s left", client.Username)
-		BroadcastMessageTCP(GLobby.Clients[conn], message);
+		BroadcastStringTCP(message);
 	}
 	delete(GLobby.Clients, conn)
 }
@@ -246,81 +273,7 @@ func Message(conn net.Conn, message string) {
 	if !ok {
 		return // Client not found
 	}
-	msg := fmt.Sprintf("%s: %s\n", client.Username, message);
-	BroadcastMessageTCP(GLobby.Clients[conn], msg);
+	msg := fmt.Sprintf("%s: %s", client.Username, message);
+	BroadcastStringTCP(msg);
 }
 
-func SetPlayerType() {
-
-}
-
-func BroadcastMessageTCP(caller *Client, msg string) {
-	for _, client := range GLobby.Clients {
-		writer := bufio.NewWriter(client.Conn)
-		_, err := writer.WriteString(formatPacketTCP(MessagePacket, msg))
-		if err != nil {
-			fmt.Println("Error writing to client:", err)
-			continue
-		}
-		err = writer.Flush()
-		if err != nil {
-			fmt.Println("Error flushing buffer:", err)
-		}
-	}
-	fmt.Println(msg)
-}
-
-func BroadcastStringTCP(message string) {
-	for _, client := range GLobby.Clients {
-		writer := bufio.NewWriter(client.Conn)
-		
-		_, err := writer.WriteString(formatPacketTCP(MessagePacket, message))
-		if err != nil {
-			fmt.Println("Error writing to client:", err)
-			continue
-		}
-		err = writer.Flush()
-		if err != nil {
-			fmt.Println("Error flushing buffer:", err)
-		}
-	}
-	fmt.Printf("BroadcastString, %s\n", message)
-}
-
-func BroadcastPacket(packet int) {
-	for _, client := range GLobby.Clients {
-		writer := bufio.NewWriter(client.Conn)
-		_, err := writer.WriteString(formatPacketTCP(packet, ""))
-		if err != nil {
-			fmt.Println("Error writing to client:", err)
-			continue
-		}
-		err = writer.Flush()
-		if err != nil {
-			fmt.Println("Error flushing buffer:", err)
-		}
-	}
-}
-
-func formatPacketTCP(packetType int, payload string) string {
-    return fmt.Sprintf("%d:%s\n", packetType, payload)
-}
-
-func SendStringTCP(client *Client, message string) {
-	GLobby.Mutex.Lock()
-	defer GLobby.Mutex.Unlock()
-
-	writer := bufio.NewWriter(client.Conn)
-	_, err := writer.WriteString(message + "\n")
-	if err != nil {
-		fmt.Println("Error writing to client:", err)
-		return
-	}
-	err = writer.Flush()
-	if err != nil {
-		fmt.Println("Error flushing buffer:", err)
-		return
-	}
-
-	fmt.Printf("Sent %s, to %s\n", message, client.Username)
-}

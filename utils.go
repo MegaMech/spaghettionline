@@ -3,7 +3,67 @@ package main
 import (
 	"fmt"
 	"net"
+	"math/rand"
+	"time"
+	"regexp"
 )
+
+// Split the data into two parts: type and payload
+// func ParsePacket(data []byte) Packet {
+// 	colonIndex := bytes.IndexByte(data, ':')
+
+// 	if colonIndex == -1 {
+// 		// Return an invalid packet if no colon is found
+// 		return Packet{Type: -1, Payload: []byte{0}}
+// 	}
+
+// 	// Split the data into type and payload
+// 	packetType := int(data[colonIndex-1])
+
+// 	payload := data[colonIndex+1:]
+
+
+// 	return Packet{Type: packetType, Payload: payload}
+// }
+
+// func ParsePacket(data []byte) (Packet) {
+// 	if len(data) < 3 {
+// 		// Not enough data to read type and length
+// 		return data
+// 	}
+
+// 	packetType := data[0]
+// 	payloadLength := int(binary.BigEndian.Uint16(data[1:3]))
+
+// 	if len(data) < 3+payloadLength {
+// 		// Not enough data for the whole packet
+// 		return nil, data
+// 	}
+
+// 	packetData := data[3 : 3+payloadLength]
+// 	packet := &Packet{Type: packetType, Payload: packetData}
+
+// 	// Remaining data after this packet
+// 	remaining := data[3+payloadLength:]
+// 	return packet, remaining
+// }
+
+// func DebugPacket(data []byte) {
+// 	fmt.Println("Raw packet data:", data)
+
+// 	// Call ParsePacket to see how it parses the data
+// 	packet := ParsePacket(data)
+// 	fmt.Printf("Parsed Packet Type: %d\n", packet.Type)
+// 	fmt.Printf("Parsed Packet Payload: %s\n", packet.Payload)
+// }
+
+// Allows letters and numbers only
+func isValidUsername(username string) bool {
+	//fmt.Printf("Debug Username: %s\n", username)
+	//fmt.Printf("Debug Username: %X\n", username)
+	re := regexp.MustCompile("^[a-zA-Z0-9]+$")
+	return re.MatchString(username)
+}
 
 func ReplicationBroadcast(caller *Client, packetType int, packetData []byte) {
 	// Broadcast data to all connected clients
@@ -30,4 +90,99 @@ func parseReplicationData(data string) (string, bool) {
 
 func serializeReplicationData(data string) (string, bool) {
 	return "data", true
+}
+
+func boolToInt(b bool) int32 {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+// func formatPacketStringTCP(packetType int, payload string) string {
+//     return fmt.Sprintf("%d:%s\n", packetType, payload)
+// }
+
+func formatPacketBytesTCP(packetType uint8, data []byte) []byte {
+    // Determine the length of the value
+    dataLength := uint16(len(data))
+
+    // Create a buffer to hold the entire packet
+    // 1 byte for type + 2 bytes for length + length of data
+    packet := make([]byte, 1+2+dataLength)
+
+    // Set the packet type
+    packet[0] = packetType
+
+    // Set the length of the data
+    // Note: We use a little-endian encoding for length here
+    packet[1] = byte(dataLength)
+    packet[2] = byte(dataLength >> 8)
+
+    // Copy the data into the packet
+    copy(packet[3:], data)
+
+    return packet
+}
+
+func formatPacketStringTCP(packetType uint8, data []byte) []byte {
+    // Determine the length of the value
+    dataLength := uint16(len(data))
+
+    // Create a buffer to hold the entire packet
+    // 1 byte for type + 2 bytes for length + length of data + 1 byte for string terminator character
+    packet := make([]byte, 1+2+dataLength+1)
+
+    // Set the packet type
+    packet[0] = packetType
+
+    // Set the length of the data
+    // Note: We use a little-endian encoding for length here
+    packet[1] = byte(dataLength)
+    packet[2] = byte(dataLength >> 8)
+
+    // Copy the data into the packet
+    copy(packet[3:], data)
+
+	// Add the string terminator
+    packet[3+dataLength] = 0
+
+    return packet
+}
+
+// func formatPacketBytesTCP(packetType int, data []byte) []byte {
+// 	packetTypeByte := byte(packetType)
+// 	packetTypeBytes := []byte{packetTypeByte, ':'}
+// 	return append(packetTypeBytes, data...)
+// }
+
+var coolUsernames = []string{
+    "ShadowHunter",
+    "LunarEclipse",
+    "CyberNinja",
+    "NebulaRider",
+    "QuantumStorm",
+    "PhantomGamer",
+    "VortexDynamo",
+    "MysticVoyager",
+    "StellarFury",
+    "EclipseSpecter",
+    "NovaGuardian",
+    "InfernoStriker",
+    "AstralWanderer",
+    "CelestialKnight",
+    "TitanBlaze",
+    "RogueSpecter",
+    "GalacticSavior",
+    "ZenithPhoenix",
+    "ThunderStrike",
+    "FrostbiteLegend",
+}
+
+func getRandomUsername() string {
+    rand.Seed(time.Now().UnixNano())
+    index := rand.Intn(len(coolUsernames))
+    name := coolUsernames[index]
+    coolUsernames = append(coolUsernames[:index], coolUsernames[index+1:]...)
+    return name
 }

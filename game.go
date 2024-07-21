@@ -26,7 +26,7 @@ type Player struct {
     /* 0x0034 */ velocity Vec3f;
 }
 
-func ReplicatePlayer(client *Client, conn *net.UDPConn, data string) {
+func ReplicatePlayer(client *Client, conn *net.UDPConn, data []byte) {
 	// repData, err := parseReplicationData(data)
 	// if err != nil {
 	// 	fmt.Println("Error parsing replication data:", err)
@@ -38,13 +38,13 @@ func ReplicatePlayer(client *Client, conn *net.UDPConn, data string) {
 	// 	return
 	// }
 
-	ReplicationBroadcast(client, PlayerPacket, []byte{0, 1, 2, 3, 4});
+	ReplicationBroadcast(client, PlayerPacket, data);
 }
 
-func ReplicateActor(client *Client, conn *net.UDPConn, data string) {
+func ReplicateActor(client *Client, conn *net.UDPConn, data []byte) {
 
 }
 
-func ReplicateObject(client *Client, conn *net.UDPConn, data string) {
+func ReplicateObject(client *Client, conn *net.UDPConn, data []byte) {
 
 }

@@ -3,8 +3,7 @@ package main
 import (
 	"fmt"
 	"net"
-	"bufio"
-	"strings"
+	"io"
 )
 
 // Start server
@@ -34,7 +33,7 @@ func startTCPServer(port string) {
 			fmt.Println("Error accepting TCP connection:", err)
 			continue
 		}
-		go HandleTCPMessage(conn)
+		go HandleTCPConnection(conn)
 	}
 }
 
@@ -60,36 +59,119 @@ func startUDPServer(port string) {
 			fmt.Println("Error reading UDP message:", err)
 			continue
 		}
-		go HandleUDPMessage(conn, addr, buffer[:n])
+		go HandleUDPConnection(conn, addr, buffer[:n])
 	}
 }
 
-func HandleTCPMessage(conn net.Conn) {
-	defer conn.Close()
+// func HandleTCPMessage(conn net.Conn) {
+// 	defer conn.Close()
+	
+// 	fmt.Println("New connection established!")
 
-	fmt.Println("New connection established!")
+// 	buffer := make([]byte, 1024)
+// 	var data []byte
 
-	reader := bufio.NewReader(conn)
+// 	type = 0
 
-	for {
-		data, err := reader.ReadString('\n')
-		if err != nil {
-			fmt.Println("Error reading message:", err)
-			break
-		}
-		data = strings.TrimSpace(data) // Remove trailing newline
-		//DebugPacket(data)
-		packet := ParsePacket(data)
-		switch packet.Type {
-			case JoinPacket:
-				Join(conn, packet.Payload);
-			case LeavePacket:
-				Leave(conn);
-			case MessagePacket:
-				Message(conn, packet.Payload);
-			default:
-				fmt.Println("Unknown packet type received: ", packet.Type)
-		}
+// 	//reader := bufio.NewReader(conn)
+// 	for {
+// 		n, err := conn.Read(buffer)
+// 		if err != nil {
+// 			fmt.Println("Error reading message:", err)
+// 			return
+// 		}
+// 		data = append(data, buffer[:n]...)
+// 		//DebugPacket(data)
+// 		packet := ParsePacket(data)
+// 		switch packet.Type {
+// 		case JoinPacket:
+// 			Join(conn, string(packet.Payload));
+// 		case LeavePacket:
+// 			Leave(conn);
+// 		case MessagePacket:
+// 			Message(conn, string(packet.Payload))
+// 		case LoadedPacket:
+// 			Loaded(conn)
+// 		case ReadyUpPacket:
+// 			ReadyUp(conn, packet.Payload)
+// 		case SetCharacterPacket:
+// 			SetCharacter(conn, packet.Payload)
+// 		default:
+// 			fmt.Println("Unknown packet type received: ", packet.Type)
+// 		}
+// 	}
+// }
+
+func HandleTCPConnection(conn net.Conn) {
+    defer conn.Close()
+
+    buffer := make([]byte, 1024) // Buffer to hold incoming data
+
+    for {
+        n, err := conn.Read(buffer)
+        if err != nil {
+            if err == io.EOF {
+                fmt.Println("Connection closed by client")
+            } else {
+                fmt.Println("Error reading from connection:", err)
+            }
+            return
+        }
+
+        data := buffer[:n]
+        processTLVData(conn, data)
+    }
+}
+
+// processTLVData processes data received in TLV format.
+func processTLVData(conn net.Conn, data []byte) {
+    index := 0
+    length := len(data)
+
+    for index < length {
+        if index+2 > length {
+            fmt.Println("Incomplete TLV data")
+            return
+        }
+
+        // Read the type and length
+        tlvType := data[index]
+        tlvLength := int(uint16(data[index+1]))
+        index += 3
+
+        // Check if we have enough data for the value
+        if index+tlvLength > length {
+            fmt.Println("Incomplete TLV value")
+			fmt.Printf("type: %d, tlvLength: %d, length: %d, index: %d\n", tlvType, tlvLength, length, index)
+            return
+        }
+
+        // Extract the value
+        value := data[index : index+tlvLength]
+        index += tlvLength
+
+        // Process the TLV
+        handleTLV(conn, tlvType, value)
+    }
+}
+
+// handleTLV processes each TLV entry.
+func handleTLV(conn net.Conn,packetType uint8, value []byte) {
+	switch packetType {
+	case JoinPacket:
+		Join(conn, string(value));
+	case LeavePacket:
+		Leave(conn);
+	case MessagePacket:
+		Message(conn, string(value))
+	case LoadedPacket:
+		Loaded(conn)
+	case ReadyUpPacket:
+		ReadyUp(conn, value)
+	case SetCharacterPacket:
+		SetCharacter(conn, value)
+	default:
+		fmt.Println("Unknown packet type received: ", packetType)
 	}
 }
 
@@ -107,49 +189,24 @@ func FindClientByUDPAddr(searchAddr *net.UDPAddr) (*Client, bool) {
 	return nil, false
 }
 
-func HandleUDPMessage(conn *net.UDPConn, addr *net.UDPAddr, data []byte) {
-	fmt.Printf("Received UDP message from %s: %s\n", addr, data)
+func HandleUDPConnection(conn *net.UDPConn, addr *net.UDPAddr, data []byte) {
+	// fmt.Printf("Received UDP message from %s: %s\n", addr, data)
 
-	// Make sure the UDP client has already done a TCP handshake.
-	client, ok := FindClientByUDPAddr(addr)
-	if !ok {
-		return
-	}
+	// // Make sure the UDP client has already done a TCP handshake.
+	// client, ok := FindClientByUDPAddr(addr)
+	// if !ok {
+	// 	return
+	// }
 
-	packet := ParsePacket(string(data))
-	switch packet.Type {
-		case PlayerPacket:
-			ReplicatePlayer(client, conn, packet.Payload)
-		case ActorPacket:
-			ReplicateActor(client, conn, packet.Payload)
-		case ObjectPacket:
-			ReplicateObject(client, conn, packet.Payload)
-		default:
-			fmt.Println("Unknown UDP packet type received: ", packet.Type)
-	}
-}
-
-func ParsePacket(data string) Packet {
-	// Split the data into two parts: type and payload
-	parts := strings.SplitN(data, ":", 2)
-	if len(parts) < 2 {
-		// Return an invalid packet if the split was unsuccessful
-		return Packet{Type: -1}
-	}
-
-	var packetType int
-	_, err := fmt.Sscanf(parts[0], "%d", &packetType)
-	if err != nil {
-		return Packet{Type: -1} // Invalid packet type
-	}
-	return Packet{Type: packetType, Payload: parts[1]}
-}
-
-func DebugPacket(data string) {
-	fmt.Println("Raw packet data:", data)
-
-	// Call ParsePacket to see how it parses the data
-	packet := ParsePacket(data)
-	fmt.Printf("Parsed Packet Type: %d\n", packet.Type)
-	fmt.Printf("Parsed Packet Payload: %s\n", packet.Payload)
+	// packet := ParsePacket(data)
+	// switch packet.Type {
+	// 	case PlayerPacket:
+	// 		ReplicatePlayer(client, conn, packet.Payload)
+	// 	case ActorPacket:
+	// 		ReplicateActor(client, conn, packet.Payload)
+	// 	case ObjectPacket:
+	// 		ReplicateObject(client, conn, packet.Payload)
+	// 	default:
+	// 		fmt.Println("Unknown UDP packet type received: ", packet.Type)
+	// }
 }
