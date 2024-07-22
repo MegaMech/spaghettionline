@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"math/rand"
-	"time"
 )
 
 const (
@@ -35,8 +34,8 @@ type Packet struct {
 // Fill the rest of the player slots with AI
 func AddAI(nClients []NetworkClient) []NetworkClient {
 
-	fmt.Printf("Players: %d\n", GLobby.PlayerCount)
-
+	fmt.Printf("Human Players: %d\n", GLobby.PlayerCount)
+	
 	for GLobby.PlayerCount < 8 {
 		var slot int
 		if len(GLobby.VacantSlots) > 0 {
@@ -49,7 +48,6 @@ func AddAI(nClients []NetworkClient) []NetworkClient {
 			GLobby.PlayerCount++
 		}
 		
-		rand.Seed(time.Now().UnixNano())
 		randomNumber := rand.Intn(8)
 		// Not a real connection. Could use the first connected player as the computer to control AI
 		nClient := NetworkClient{
@@ -102,7 +100,7 @@ func BroadcastPlayerSlots() {
 			}
 
 			binary.Write(&buffer, binary.LittleEndian, int32(len(nClient.Username)))
-			buffer.WriteString(nClient.Username)
+			buffer.Write([]byte(nClient.Username))
 			binary.Write(&buffer, binary.LittleEndian, int32(nClient.Slot))
 			binary.Write(&buffer, binary.LittleEndian, boolToInt(nClient.IsPlayer))
 			binary.Write(&buffer, binary.LittleEndian, boolToInt(nClient.IsAI))

@@ -148,6 +148,7 @@ func SetCharacter(conn net.Conn, value []byte) {
 			GLobby.Clients[conn].Character = character
 		} else { // Players can choose the same characters
 			GLobby.Clients[conn].Character = character
+			SendMessageToPlayer(GLobby.Clients[conn], "Chosen character: "+string(character));
 		}
 	}
 }
@@ -222,7 +223,6 @@ func SelectCourse() {
 	}
 
 	// Randomly choose from tied courses if there are multiple with the same max count
-	rand.Seed(time.Now().UnixNano())
 	selectedCourse := maxCourses[rand.Intn(len(maxCourses))]
 	BroadcastSelectedCourse(selectedCourse)
 }

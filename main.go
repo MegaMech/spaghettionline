@@ -4,10 +4,13 @@ import (
 	"fmt"
 	"net"
 	"io"
+	"math/rand"
+	"time"
 )
 
 // Start server
 func main() {
+	rand.Seed(time.Now().UnixNano())
 	// Start TCP server
 	go startTCPServer(":64010")
 
@@ -106,7 +109,7 @@ func HandleTCPConnection(conn net.Conn) {
     defer conn.Close()
 
     buffer := make([]byte, 1024) // Buffer to hold incoming data
-
+	fmt.Println("Connection from client");
     for {
         n, err := conn.Read(buffer)
         if err != nil {

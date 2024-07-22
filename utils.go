@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net"
 	"math/rand"
-	"time"
 	"regexp"
 )
 
@@ -180,7 +179,6 @@ var coolUsernames = []string{
 }
 
 func getRandomUsername() string {
-    rand.Seed(time.Now().UnixNano())
     index := rand.Intn(len(coolUsernames))
     name := coolUsernames[index]
     coolUsernames = append(coolUsernames[:index], coolUsernames[index+1:]...)
