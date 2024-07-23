@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 	"math/rand"
+	"strconv"
 )
 
 const MaxPlayerSlots = 8
@@ -152,7 +153,8 @@ func SetCharacter(conn net.Conn, value []byte) {
 			GLobby.Clients[conn].Character = character
 		} else { // Players can choose the same characters
 			GLobby.Clients[conn].Character = character
-			SendMessageToPlayer(GLobby.Clients[conn], "Chosen character: "+string(character));
+
+			SendMessageToPlayer(GLobby.Clients[conn], "Chosen character: "+strconv.Itoa(int(character)))
 		}
 	}
 }

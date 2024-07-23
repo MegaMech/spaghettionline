@@ -232,5 +232,5 @@ func SendMessageToPlayer(client *Client, message string) {
 		fmt.Println("Error flushing buffer:", err)
 	}
 
-	fmt.Printf("Sent message to %s, %s\n", client.Username, message)
+	fmt.Printf("Message to %s: %s\n", client.Username, message)
 }
