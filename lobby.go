@@ -13,11 +13,11 @@ import (
 const MaxPlayerSlots = 8
 const countDownTimer = 2
 const lockInTimer = 3 // Players are locked in with their choices
-var LockedIn = false
 var SelectedCourse = 0
 
 type Client struct {
 	Conn     net.Conn
+	NetClient NetworkClient // NetworkClient gets sent to users
 	Username string
 	Slot int
 	IsPlayer bool // Observer if false
@@ -47,6 +47,8 @@ type Lobby struct {
 	Mutex   sync.Mutex
 	PlayerCount int
 	UniqueCharacters bool
+	CountdownStarted bool
+	LockedIn bool
 	StartSession bool
 }
 
@@ -55,6 +57,8 @@ var GLobby = Lobby{
 	VacantSlots: make([]int, 0),
 	PlayerCount: 0,
 	UniqueCharacters: false,
+	CountdownStarted: false,
+	LockedIn: false,
 	StartSession: false,
 }
 
@@ -81,7 +85,7 @@ func Join(conn net.Conn, username string) {
 	defer GLobby.Mutex.Unlock()
 
 	// Too late, the game is already starting
-	if (LockedIn) {
+	if (GLobby.LockedIn) {
 		return
 	}
 	
@@ -186,11 +190,17 @@ func ReadyUp(conn net.Conn, value []byte) {
 }
 
 func StartCountdown() {
+	// The countdown or session is already in-progress
+	if (GLobby.CountdownStarted || GLobby.StartSession || GLobby.LockedIn) {
+		return;
+	}
+	GLobby.CountdownStarted = true
 	timer := time.NewTimer(countDownTimer * time.Second)
 	fmt.Printf("Starting countdown %ds\n", countDownTimer);
 	<-timer.C
 
-	LockedIn = true
+	GLobby.LockedIn = true
+
 	fmt.Printf("Final countdown %ds\n", lockInTimer);
 	
 	timer2 := time.NewTimer(lockInTimer * time.Second)

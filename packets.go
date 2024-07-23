@@ -79,6 +79,7 @@ func BroadcastPlayerSlots() {
 				Character: client.Character,
 			}
 			nClients = append(nClients, nClient)
+			client.NetClient = nClient
 		}
 	}
 
@@ -93,7 +94,7 @@ func BroadcastPlayerSlots() {
 		var buffer bytes.Buffer
 		for _, nClient := range nClients {
 			// Set HasAuthority if the client matches the current connection
-			if client.Username == nClient.Username {
+			if client.NetClient == nClient {
 				nClient.HasAuthority = true
 			} else {
 				nClient.HasAuthority = false
@@ -114,11 +115,11 @@ func BroadcastPlayerSlots() {
 }
 
 func SendBinaryTCP(conn net.Conn, packetType uint8, data []byte) {
-	writer := bufio.NewWriter(conn)
 	
 	// Format packet: type:data
 	formattedPacket := formatPacketBytesTCP(packetType, data)
 	
+	writer := bufio.NewWriter(conn)
 	_, err := writer.Write(formattedPacket)
 	if err != nil {
 		fmt.Println("Error writing to client:", err)
