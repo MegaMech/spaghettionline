@@ -173,6 +173,8 @@ func handleTLV(conn net.Conn,packetType uint8, value []byte) {
 		ReadyUp(conn, value)
 	case SetCharacterPacket:
 		SetCharacter(conn, value)
+	case CupVotePacket:
+		CupVote(conn, value)
 	default:
 		fmt.Println("Unknown packet type received: ", packetType)
 	}

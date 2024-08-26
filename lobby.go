@@ -159,9 +159,9 @@ func SetCharacter(conn net.Conn, value []byte) {
 	}
 }
 
-func CourseVote(conn net.Conn, value int) {
+func CupVote(conn net.Conn, value []byte) {
 	if GLobby.Clients[conn].IsPlayer {
-		GLobby.Clients[conn].Course = value
+		GLobby.Clients[conn].Course = int(value[0])
 	}
 }
 
@@ -185,7 +185,7 @@ func ReadyUp(conn net.Conn, value []byte) {
 			}
 		}
 		//if count == (currentPlayers / 2) {
-		if count > 0 { // <-- Debug. Real ^
+		if count >= currentPlayers { // <-- Debug. Real ^
 			StartCountdown()
 		}
 	}

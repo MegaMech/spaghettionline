@@ -17,6 +17,7 @@ const (
 	LoadedPacket
 	ReadyUpPacket
 	SetCharacterPacket
+	CupVotePacket
 	CoursePacket
 	AssignPlayerSlotsPacket
 	StartSessionPacket
