@@ -2,6 +2,9 @@ package main
 
 import (
 	"net"
+    "fmt"
+    "bytes"
+    "encoding/binary"
 )
 
 type Vec3s [3]int16
@@ -26,7 +29,8 @@ type Player struct {
     /* 0x0034 */ velocity Vec3f;
 }
 
-func ReplicatePlayer(client *Client, conn *net.UDPConn, data []byte) {
+//func ReplicatePlayer(client *Client, conn *net.UDPConn, data []byte) {
+func ReplicatePlayer(client net.Conn, data []byte) {
 	// repData, err := parseReplicationData(data)
 	// if err != nil {
 	// 	fmt.Println("Error parsing replication data:", err)
@@ -38,7 +42,24 @@ func ReplicatePlayer(client *Client, conn *net.UDPConn, data []byte) {
 	// 	return
 	// }
 
-	ReplicationBroadcast(client, PlayerPacket, data);
+	var slot uint32 = uint32(GLobby.Clients[client].Slot) // You need to adapt this to where `Slot` is stored
+
+	// Create a buffer to hold the slot as uint32 (4 bytes)
+	buf := new(bytes.Buffer)
+
+	// Convert slot to 4-byte representation in Little Endian or Big Endian
+	err := binary.Write(buf, binary.LittleEndian, slot) // Change to BigEndian if needed
+	if err != nil {
+		fmt.Println("Error converting slot to bytes:", err)
+		return
+	}
+
+    
+	// Prepend the slot bytes to the original data
+	newData := append(buf.Bytes(), data...)
+    fmt.Printf("pos: %f %f %f\n", float32(newData[4]), float32(newData[8]), float32(newData[12]));
+
+   BroadcastBinaryTCP(client, PlayerPacket, newData);
 }
 
 func ReplicateActor(client *Client, conn *net.UDPConn, data []byte) {

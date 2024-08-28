@@ -133,6 +133,35 @@ func SendBinaryTCP(conn net.Conn, packetType uint8, data []byte) {
 	fmt.Println("Sent binary data to client:", conn.RemoteAddr())
 }
 
+
+func BroadcastBinaryTCP(conn net.Conn, packetType uint8, data []byte) {
+	GLobby.Mutex.Lock()
+	defer GLobby.Mutex.Unlock()
+	
+	formattedPacket := formatPacketBytesTCP(packetType, data)
+	
+	for _, client := range GLobby.Clients {
+		if (client == GLobby.Clients[conn]) {
+			continue
+		}
+
+		// Format packet: type:data
+		
+		writer := bufio.NewWriter(client.Conn)
+		_, err := writer.Write(formattedPacket)
+		if err != nil {
+			fmt.Println("Error writing to client:", err)
+			return
+		}
+		err = writer.Flush()
+		if err != nil {
+			fmt.Println("Error flushing buffer:", err)
+		}
+	//fmt.Println("Sent binary data to client:", conn.RemoteAddr())
+	}
+}
+
+
 func BroadcastSelectedCourse(selectedCourse int) {
 	GLobby.Mutex.Lock()
 	defer GLobby.Mutex.Unlock()
@@ -234,4 +263,36 @@ func SendMessageToPlayer(client *Client, message string) {
 	}
 
 	fmt.Printf("Message to %s: %s\n", client.Username, message)
+}
+
+
+func ReplicationBroadcastTCP(caller net.Conn, packetType uint8, packetData []byte) {
+	GLobby.Mutex.Lock()
+	defer GLobby.Mutex.Unlock()
+	
+	// Broadcast data to all connected clients
+	for _, client := range GLobby.Clients {
+		if client == GLobby.Clients[caller] {
+			continue // Skip the calling client
+		}
+
+
+        packet := formatPacketBytesTCP(PlayerPacket, packetData)
+
+		// Cast the connection to *net.UDPConn
+		//if udpConn, ok := client.Conn.(*net.TCPConn); ok {
+            writer := bufio.NewWriter(client.Conn)
+			_, err := writer.Write(packet)
+			if err != nil {
+				fmt.Println("Error sending data to client:", err)
+                continue
+			}
+            err = writer.Flush()
+            if err != nil {
+                fmt.Println("Error flushing buffer:", err)
+            }
+		//} else {
+		//	fmt.Println("Client connection is not of type *net.UDPConn")
+		//}
+	}
 }

@@ -175,6 +175,8 @@ func handleTLV(conn net.Conn,packetType uint8, value []byte) {
 		SetCharacter(conn, value)
 	case CupVotePacket:
 		CupVote(conn, value)
+	case PlayerPacket:
+		ReplicatePlayer(conn, value)
 	default:
 		fmt.Println("Unknown packet type received: ", packetType)
 	}
