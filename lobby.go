@@ -18,6 +18,7 @@ var SelectedCourse = 0
 
 type Client struct {
 	Conn     net.Conn
+	UDPAddr net.UDPAddr
 	NetClient NetworkClient // NetworkClient gets sent to users
 	Username string
 	Slot int
@@ -44,6 +45,7 @@ type NetworkClient struct { // For sending to the clients
 
 type Lobby struct {
 	Clients map[net.Conn]*Client
+	ClientsUDP map[net.UDPConn]*Client
 	VacantSlots []int // Slots that were occupied but are now vacant
 	Mutex   sync.Mutex
 	PlayerCount int
@@ -55,6 +57,7 @@ type Lobby struct {
 
 var GLobby = Lobby{
 	Clients: make(map[net.Conn]*Client, 0),
+	ClientsUDP: make(map[net.UDPConn]*Client, 0),
 	VacantSlots: make([]int, 0),
 	PlayerCount: 0,
 	UniqueCharacters: false,
@@ -134,6 +137,31 @@ func Join(conn net.Conn, username string) {
 		BroadcastStringTCP(message)
 	}
 
+}
+
+func JoinUDP(conn net.Conn, value []byte) {
+	GLobby.Mutex.Lock()
+	defer GLobby.Mutex.Unlock()
+
+	for _, client := range GLobby.Clients {
+		if (client.Conn == conn) {
+			fmt.Printf("Recorded UDP addr for %s\n", client.Username);
+			client.UDPAddr.IP = net.ParseIP(string(uint32(value[0])));
+			client.UDPAddr.Port = int(uint16(value[4]));
+		}
+	}
+}
+
+func RegisterConnectionUDP(conn net.UDPConn, value []byte) {
+	GLobby.Mutex.Lock()
+	defer GLobby.Mutex.Unlock()
+
+	for _, client := range GLobby.Clients {
+		if (client.UDPAddr.String() == conn.RemoteAddr().String()) {
+			fmt.Printf("Successfully registered %s on the UDP server", client.Username);
+			GLobby.ClientsUDP[conn] = client
+		}
+	}
 }
 
 func SetCharacter(conn net.Conn, value []byte) {

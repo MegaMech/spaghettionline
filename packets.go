@@ -12,6 +12,7 @@ import (
 const (
 	// TCP Packets
 	JoinPacket = iota
+	JoinPacketUDP
 	LeavePacket
 	MessagePacket
 	LoadedPacket
@@ -22,6 +23,7 @@ const (
 	AssignPlayerSlotsPacket
 	StartSessionPacket
 	// UDP Packets
+	RegisterUDPPacket
 	PlayerPacket
 	ActorPacket
 	ObjectPacket

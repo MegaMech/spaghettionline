@@ -55,60 +55,21 @@ func startUDPServer(port string) {
 	defer conn.Close()
 	fmt.Println("UDP server started on port", port)
 
-	buffer := make([]byte, 1024)
+	buffer := make([]byte, 4096)
 	for {
 		n, addr, err := conn.ReadFromUDP(buffer)
 		if err != nil {
 			fmt.Println("Error reading UDP message:", err)
 			continue
 		}
-		go HandleUDPConnection(conn, addr, buffer[:n])
+		go HandleUDPConnection(*conn, addr, buffer[:n])
 	}
 }
-
-// func HandleTCPMessage(conn net.Conn) {
-// 	defer conn.Close()
-	
-// 	fmt.Println("New connection established!")
-
-// 	buffer := make([]byte, 1024)
-// 	var data []byte
-
-// 	type = 0
-
-// 	//reader := bufio.NewReader(conn)
-// 	for {
-// 		n, err := conn.Read(buffer)
-// 		if err != nil {
-// 			fmt.Println("Error reading message:", err)
-// 			return
-// 		}
-// 		data = append(data, buffer[:n]...)
-// 		//DebugPacket(data)
-// 		packet := ParsePacket(data)
-// 		switch packet.Type {
-// 		case JoinPacket:
-// 			Join(conn, string(packet.Payload));
-// 		case LeavePacket:
-// 			Leave(conn);
-// 		case MessagePacket:
-// 			Message(conn, string(packet.Payload))
-// 		case LoadedPacket:
-// 			Loaded(conn)
-// 		case ReadyUpPacket:
-// 			ReadyUp(conn, packet.Payload)
-// 		case SetCharacterPacket:
-// 			SetCharacter(conn, packet.Payload)
-// 		default:
-// 			fmt.Println("Unknown packet type received: ", packet.Type)
-// 		}
-// 	}
-// }
 
 func HandleTCPConnection(conn net.Conn) {
     defer conn.Close()
 
-    buffer := make([]byte, 1024) // Buffer to hold incoming data
+    buffer := make([]byte, 4096) // Buffer to hold incoming data
 	fmt.Println("Connection from client");
     for {
         n, err := conn.Read(buffer)
@@ -163,6 +124,8 @@ func handleTLV(conn net.Conn,packetType uint8, value []byte) {
 	switch packetType {
 	case JoinPacket:
 		Join(conn, string(value));
+	case JoinPacketUDP:
+		JoinUDP(conn, value);
 	case LeavePacket:
 		Leave(conn);
 	case MessagePacket:
@@ -175,45 +138,62 @@ func handleTLV(conn net.Conn,packetType uint8, value []byte) {
 		SetCharacter(conn, value)
 	case CupVotePacket:
 		CupVote(conn, value)
-	case PlayerPacket:
-		ReplicatePlayer(conn, value)
 	default:
 		fmt.Println("Unknown packet type received: ", packetType)
 	}
 }
 
 // Function to find a client by UDP address
-func FindClientByUDPAddr(searchAddr *net.UDPAddr) (*Client, bool) {
-	GLobby.Mutex.Lock()
-	defer GLobby.Mutex.Unlock()
+// func FindClientByUDPAddr(searchAddr *net.UDPAddr) (*Client, bool) {
+// 	GLobby.Mutex.Lock()
+// 	defer GLobby.Mutex.Unlock()
 
-	for _, client := range GLobby.Clients {
-		if client.Conn.RemoteAddr().String() == searchAddr.String() {
-			return client, true
-		}
-	}
-	// Client not found
-	return nil, false
-}
 
-func HandleUDPConnection(conn *net.UDPConn, addr *net.UDPAddr, data []byte) {
-	// fmt.Printf("Received UDP message from %s: %s\n", addr, data)
+	
+// 	for _, client := range GLobby.Clients {
+// 		fmt.Print(client.Conn.RemoteAddr().String())
+// 		fmt.Print(searchAddr.String())
+// 		if client.UDPConn == searchAddr.String() {
+// 			return client, true
+// 		}
+// 	}
+// 	// Client not found
+// 	return nil, false
+// }
 
-	// // Make sure the UDP client has already done a TCP handshake.
+func HandleUDPConnection(conn net.UDPConn, addr *net.UDPAddr, data []byte) {
+	//fmt.Printf("Received UDP message from %s: 0x%X\n", addr, data)
+
+	// Make sure the UDP client has already done a TCP handshake.
 	// client, ok := FindClientByUDPAddr(addr)
 	// if !ok {
+	// 	//fmt.Printf("Couldn't find client with UDP address %s\n", addr);
 	// 	return
 	// }
 
-	// packet := ParsePacket(data)
-	// switch packet.Type {
-	// 	case PlayerPacket:
-	// 		ReplicatePlayer(client, conn, packet.Payload)
-	// 	case ActorPacket:
-	// 		ReplicateActor(client, conn, packet.Payload)
-	// 	case ObjectPacket:
-	// 		ReplicateObject(client, conn, packet.Payload)
-	// 	default:
-	// 		fmt.Println("Unknown UDP packet type received: ", packet.Type)
-	// }
+
+		packet := ParsePacket(data)
+		fmt.Printf("packet type %d\n", packet.Type);
+		switch packet.Type {
+		case RegisterUDPPacket:
+			RegisterConnectionUDP(conn, packet.Payload)
+		case PlayerPacket:
+			fmt.Print("Sending Player Data");
+			if (GLobby.ClientsUDP[conn] != nil) {
+				client := GLobby.ClientsUDP[conn]
+				ReplicatePlayer(client, data)
+			}
+		case ActorPacket:
+			if (GLobby.ClientsUDP[conn] != nil) {
+				client := GLobby.ClientsUDP[conn]
+				ReplicateActor(client, conn, packet.Payload)
+			}
+		case ObjectPacket:
+			if (GLobby.ClientsUDP[conn] != nil) {
+				client := GLobby.ClientsUDP[conn]
+				ReplicateObject(client, conn, packet.Payload)
+			}
+		default:
+			fmt.Println("Unknown UDP packet type received: ", packet.Type)
+		}
 }

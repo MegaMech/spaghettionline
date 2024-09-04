@@ -30,7 +30,7 @@ type Player struct {
 }
 
 //func ReplicatePlayer(client *Client, conn *net.UDPConn, data []byte) {
-func ReplicatePlayer(client net.Conn, data []byte) {
+func ReplicatePlayer(client *Client, data []byte) {
 	// repData, err := parseReplicationData(data)
 	// if err != nil {
 	// 	fmt.Println("Error parsing replication data:", err)
@@ -42,7 +42,7 @@ func ReplicatePlayer(client net.Conn, data []byte) {
 	// 	return
 	// }
 
-	var slot uint32 = uint32(GLobby.Clients[client].Slot) // You need to adapt this to where `Slot` is stored
+	var slot uint32 = uint32(client.Slot) // You need to adapt this to where `Slot` is stored
 
 	// Create a buffer to hold the slot as uint32 (4 bytes)
 	buf := new(bytes.Buffer)
@@ -54,18 +54,17 @@ func ReplicatePlayer(client net.Conn, data []byte) {
 		return
 	}
 
-    
 	// Prepend the slot bytes to the original data
 	newData := append(buf.Bytes(), data...)
-    fmt.Printf("pos: %f %f %f\n", float32(newData[4]), float32(newData[8]), float32(newData[12]));
 
-   BroadcastBinaryTCP(client, PlayerPacket, newData);
+//   BroadcastBinaryTCP(client, PlayerPacket, newData)
+    ReplicationBroadcastUDP(client, PlayerPacket, newData)
 }
 
-func ReplicateActor(client *Client, conn *net.UDPConn, data []byte) {
+func ReplicateActor(client *Client, conn net.UDPConn, data []byte) {
 
 }
 
-func ReplicateObject(client *Client, conn *net.UDPConn, data []byte) {
+func ReplicateObject(client *Client, conn net.UDPConn, data []byte) {
 
 }

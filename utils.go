@@ -7,45 +7,27 @@ import (
 	"regexp"
 )
 
-// Split the data into two parts: type and payload
-// func ParsePacket(data []byte) Packet {
-// 	colonIndex := bytes.IndexByte(data, ':')
+func ParsePacket(data []byte) (*Packet) {
+	if len(data) < 3 {
+		fmt.Print("Not enough UDP data to read type and length")
+		return nil
+	}
 
-// 	if colonIndex == -1 {
-// 		// Return an invalid packet if no colon is found
-// 		return Packet{Type: -1, Payload: []byte{0}}
-// 	}
+	packetType := data[0]
+	//payloadLength := uint16(data[2])
 
-// 	// Split the data into type and payload
-// 	packetType := int(data[colonIndex-1])
+    // Not reading payloadLenght correctly
+	// if len(data) < int(3+payloadLength) {
+	// 	fmt.Printf("Not enough data for the whole UDP packet: 0x%X data len: 0x%X\n", payloadLength, len(data))
+    //     fmt.Printf("type: 0x%d\n", packetType)
+	// 	return nil
+	// }
 
-// 	payload := data[colonIndex+1:]
+	packetData := data[3 : len(data)]
+	return &Packet{Type: packetType, Payload: packetData}
 
-
-// 	return Packet{Type: packetType, Payload: payload}
-// }
-
-// func ParsePacket(data []byte) (Packet) {
-// 	if len(data) < 3 {
-// 		// Not enough data to read type and length
-// 		return data
-// 	}
-
-// 	packetType := data[0]
-// 	payloadLength := int(binary.BigEndian.Uint16(data[1:3]))
-
-// 	if len(data) < 3+payloadLength {
-// 		// Not enough data for the whole packet
-// 		return nil, data
-// 	}
-
-// 	packetData := data[3 : 3+payloadLength]
-// 	packet := &Packet{Type: packetType, Payload: packetData}
-
-// 	// Remaining data after this packet
-// 	remaining := data[3+payloadLength:]
-// 	return packet, remaining
-// }
+	//return packet
+}
 
 // func DebugPacket(data []byte) {
 // 	fmt.Println("Raw packet data:", data)
@@ -64,7 +46,7 @@ func isValidUsername(username string) bool {
 	return re.MatchString(username)
 }
 
-func ReplicationBroadcast(caller *Client, packetType int, packetData []byte) {
+func ReplicationBroadcastUDP(caller *Client, packetType int, packetData []byte) {
 	// Broadcast data to all connected clients
 	for _, client := range GLobby.Clients {
 		if client == caller {
