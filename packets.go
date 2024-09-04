@@ -1,12 +1,12 @@
 package main
 
 import (
-	"fmt"
 	"bufio"
-	"net"
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"math/rand"
+	"net"
 )
 
 const (
@@ -22,8 +22,7 @@ const (
 	CoursePacket
 	AssignPlayerSlotsPacket
 	StartSessionPacket
-	// UDP Packets
-	RegisterUDPPacket
+	RegisterUDPPacket // UDP Packets
 	PlayerPacket
 	ActorPacket
 	ObjectPacket
@@ -38,7 +37,7 @@ type Packet struct {
 func AddAI(nClients []NetworkClient) []NetworkClient {
 
 	fmt.Printf("Human Players: %d\n", GLobby.PlayerCount)
-	
+
 	for GLobby.PlayerCount < 8 {
 		var slot int
 		if len(GLobby.VacantSlots) > 0 {
@@ -50,15 +49,15 @@ func AddAI(nClients []NetworkClient) []NetworkClient {
 			slot = GLobby.PlayerCount
 			GLobby.PlayerCount++
 		}
-		
+
 		randomNumber := rand.Intn(8)
 		// Not a real connection. Could use the first connected player as the computer to control AI
 		nClient := NetworkClient{
-			Username:  getRandomUsername(),
-			Slot:      slot,
-			IsPlayer:  true,
-			IsAI: true,
-			Character: randomNumber,
+			Username:     getRandomUsername(),
+			Slot:         slot,
+			IsPlayer:     true,
+			IsAI:         true,
+			Character:    randomNumber,
 			HasAuthority: false,
 		}
 		nClients = append(nClients, nClient)
@@ -73,12 +72,12 @@ func BroadcastPlayerSlots() {
 	// Generate the list of network clients (discludes observers)
 	var nClients []NetworkClient
 	for _, client := range GLobby.Clients {
-		if (client.IsPlayer) {
+		if client.IsPlayer {
 			nClient := NetworkClient{
 				Username:  client.Username,
 				Slot:      client.Slot,
 				IsPlayer:  client.IsPlayer,
-				IsAI: false,
+				IsAI:      false,
 				Character: client.Character,
 			}
 			nClients = append(nClients, nClient)
@@ -90,7 +89,7 @@ func BroadcastPlayerSlots() {
 	nClients = AddAI(nClients)
 
 	for _, client := range nClients {
-		fmt.Printf("Slot %d\n",client.Slot)
+		fmt.Printf("Slot %d\n", client.Slot)
 	}
 
 	for conn, client := range GLobby.Clients {
@@ -118,10 +117,10 @@ func BroadcastPlayerSlots() {
 }
 
 func SendBinaryTCP(conn net.Conn, packetType uint8, data []byte) {
-	
+
 	// Format packet: type:data
 	formattedPacket := formatPacketBytesTCP(packetType, data)
-	
+
 	writer := bufio.NewWriter(conn)
 	_, err := writer.Write(formattedPacket)
 	if err != nil {
@@ -135,20 +134,19 @@ func SendBinaryTCP(conn net.Conn, packetType uint8, data []byte) {
 	fmt.Println("Sent binary data to client:", conn.RemoteAddr())
 }
 
-
 func BroadcastBinaryTCP(conn net.Conn, packetType uint8, data []byte) {
 	GLobby.Mutex.Lock()
 	defer GLobby.Mutex.Unlock()
-	
+
 	formattedPacket := formatPacketBytesTCP(packetType, data)
-	
+
 	for _, client := range GLobby.Clients {
-		if (client == GLobby.Clients[conn]) {
+		if client == GLobby.Clients[conn] {
 			continue
 		}
 
 		// Format packet: type:data
-		
+
 		writer := bufio.NewWriter(client.Conn)
 		_, err := writer.Write(formattedPacket)
 		if err != nil {
@@ -159,17 +157,16 @@ func BroadcastBinaryTCP(conn net.Conn, packetType uint8, data []byte) {
 		if err != nil {
 			fmt.Println("Error flushing buffer:", err)
 		}
-	//fmt.Println("Sent binary data to client:", conn.RemoteAddr())
+		//fmt.Println("Sent binary data to client:", conn.RemoteAddr())
 	}
 }
-
 
 func BroadcastSelectedCourse(selectedCourse int) {
 	GLobby.Mutex.Lock()
 	defer GLobby.Mutex.Unlock()
 
 	data := make([]byte, 4)
-    binary.LittleEndian.PutUint32(data, uint32(selectedCourse))
+	binary.LittleEndian.PutUint32(data, uint32(selectedCourse))
 
 	packet := formatPacketBytesTCP(CoursePacket, data)
 
@@ -209,12 +206,12 @@ func BroadcastSelectedCourse(selectedCourse int) {
 // }
 
 func BroadcastStringTCP(message string) {
-    data := []byte(message)
-    packet := formatPacketStringTCP(MessagePacket, data)
+	data := []byte(message)
+	packet := formatPacketStringTCP(MessagePacket, data)
 
 	for _, client := range GLobby.Clients {
 		writer := bufio.NewWriter(client.Conn)
-		
+
 		_, err := writer.Write(packet)
 		if err != nil {
 			fmt.Println("Error writing to client:", err)
@@ -229,7 +226,7 @@ func BroadcastStringTCP(message string) {
 }
 
 func BroadcastPacket(packetType uint8) {
-    packet := formatPacketBytesTCP(packetType, []byte{0})
+	packet := formatPacketBytesTCP(packetType, []byte{0})
 
 	for _, client := range GLobby.Clients {
 		writer := bufio.NewWriter(client.Conn)
@@ -250,10 +247,10 @@ func SendMessageToPlayer(client *Client, message string) {
 	defer GLobby.Mutex.Unlock()
 
 	data := []byte(message)
-    packet := formatPacketStringTCP(MessagePacket, data)
+	packet := formatPacketStringTCP(MessagePacket, data)
 
 	writer := bufio.NewWriter(client.Conn)
-	
+
 	_, err := writer.Write(packet)
 	if err != nil {
 		fmt.Println("Error writing to client:", err)
@@ -267,32 +264,30 @@ func SendMessageToPlayer(client *Client, message string) {
 	fmt.Printf("Message to %s: %s\n", client.Username, message)
 }
 
-
 func ReplicationBroadcastTCP(caller net.Conn, packetType uint8, packetData []byte) {
 	GLobby.Mutex.Lock()
 	defer GLobby.Mutex.Unlock()
-	
+
 	// Broadcast data to all connected clients
 	for _, client := range GLobby.Clients {
 		if client == GLobby.Clients[caller] {
 			continue // Skip the calling client
 		}
 
-
-        packet := formatPacketBytesTCP(PlayerPacket, packetData)
+		packet := formatPacketBytesTCP(PlayerPacket, packetData)
 
 		// Cast the connection to *net.UDPConn
 		//if udpConn, ok := client.Conn.(*net.TCPConn); ok {
-            writer := bufio.NewWriter(client.Conn)
-			_, err := writer.Write(packet)
-			if err != nil {
-				fmt.Println("Error sending data to client:", err)
-                continue
-			}
-            err = writer.Flush()
-            if err != nil {
-                fmt.Println("Error flushing buffer:", err)
-            }
+		writer := bufio.NewWriter(client.Conn)
+		_, err := writer.Write(packet)
+		if err != nil {
+			fmt.Println("Error sending data to client:", err)
+			continue
+		}
+		err = writer.Flush()
+		if err != nil {
+			fmt.Println("Error flushing buffer:", err)
+		}
 		//} else {
 		//	fmt.Println("Client connection is not of type *net.UDPConn")
 		//}

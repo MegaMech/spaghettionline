@@ -2,9 +2,9 @@ package main
 
 import (
 	"fmt"
-	"net"
 	"io"
 	"math/rand"
+	"net"
 	"time"
 )
 
@@ -67,67 +67,67 @@ func startUDPServer(port string) {
 }
 
 func HandleTCPConnection(conn net.Conn) {
-    defer conn.Close()
+	defer conn.Close()
 
-    buffer := make([]byte, 4096) // Buffer to hold incoming data
-	fmt.Println("Connection from client");
-    for {
-        n, err := conn.Read(buffer)
-        if err != nil {
-            if err == io.EOF {
-                fmt.Println("Connection closed by client")
-            } else {
-                fmt.Println("Error reading from connection:", err)
-            }
-            return
-        }
+	buffer := make([]byte, 4096) // Buffer to hold incoming data
+	fmt.Println("Connection from client")
+	for {
+		n, err := conn.Read(buffer)
+		if err != nil {
+			if err == io.EOF {
+				fmt.Println("Connection closed by client")
+			} else {
+				fmt.Println("Error reading from connection:", err)
+			}
+			return
+		}
 
-        data := buffer[:n]
-        processTLVData(conn, data)
-    }
+		data := buffer[:n]
+		processTLVData(conn, data)
+	}
 }
 
 // processTLVData processes data received in TLV format.
 func processTLVData(conn net.Conn, data []byte) {
-    index := 0
-    length := len(data)
+	index := 0
+	length := len(data)
 
-    for index < length {
-        if index+2 > length {
-            fmt.Println("Incomplete TLV data")
-            return
-        }
+	for index < length {
+		if index+2 > length {
+			fmt.Println("Incomplete TLV data")
+			return
+		}
 
-        // Read the type and length
-        tlvType := data[index]
-        tlvLength := int(uint16(data[index+1]))
-        index += 3
+		// Read the type and length
+		tlvType := data[index]
+		tlvLength := int(uint16(data[index+1]))
+		index += 3
 
-        // Check if we have enough data for the value
-        if index+tlvLength > length {
-            fmt.Println("Incomplete TLV value")
+		// Check if we have enough data for the value
+		if index+tlvLength > length {
 			fmt.Printf("type: %d, tlvLength: %d, length: %d, index: %d\n", tlvType, tlvLength, length, index)
-            return
-        }
+			fmt.Println("Incomplete TLV value")
+			return
+		}
 
-        // Extract the value
-        value := data[index : index+tlvLength]
-        index += tlvLength
+		// Extract the value
+		value := data[index : index+tlvLength]
+		index += tlvLength
 
-        // Process the TLV
-        handleTLV(conn, tlvType, value)
-    }
+		// Process the TLV
+		handleTLV(conn, tlvType, value)
+	}
 }
 
 // handleTLV processes each TLV entry.
-func handleTLV(conn net.Conn,packetType uint8, value []byte) {
+func handleTLV(conn net.Conn, packetType uint8, value []byte) {
 	switch packetType {
 	case JoinPacket:
-		Join(conn, string(value));
+		Join(conn, string(value))
 	case JoinPacketUDP:
-		JoinUDP(conn, value);
+		JoinUDP(conn, value)
 	case LeavePacket:
-		Leave(conn);
+		Leave(conn)
 	case MessagePacket:
 		Message(conn, string(value))
 	case LoadedPacket:
@@ -148,8 +148,6 @@ func handleTLV(conn net.Conn,packetType uint8, value []byte) {
 // 	GLobby.Mutex.Lock()
 // 	defer GLobby.Mutex.Unlock()
 
-
-	
 // 	for _, client := range GLobby.Clients {
 // 		fmt.Print(client.Conn.RemoteAddr().String())
 // 		fmt.Print(searchAddr.String())
@@ -171,29 +169,28 @@ func HandleUDPConnection(conn net.UDPConn, addr *net.UDPAddr, data []byte) {
 	// 	return
 	// }
 
-
-		packet := ParsePacket(data)
-		fmt.Printf("packet type %d\n", packet.Type);
-		switch packet.Type {
-		case RegisterUDPPacket:
-			RegisterConnectionUDP(conn, packet.Payload)
-		case PlayerPacket:
-			fmt.Print("Sending Player Data");
-			if (GLobby.ClientsUDP[conn] != nil) {
-				client := GLobby.ClientsUDP[conn]
-				ReplicatePlayer(client, data)
-			}
-		case ActorPacket:
-			if (GLobby.ClientsUDP[conn] != nil) {
-				client := GLobby.ClientsUDP[conn]
-				ReplicateActor(client, conn, packet.Payload)
-			}
-		case ObjectPacket:
-			if (GLobby.ClientsUDP[conn] != nil) {
-				client := GLobby.ClientsUDP[conn]
-				ReplicateObject(client, conn, packet.Payload)
-			}
-		default:
-			fmt.Println("Unknown UDP packet type received: ", packet.Type)
+	packet := ParsePacket(data)
+	fmt.Printf("packet type %d\n", packet.Type)
+	switch packet.Type {
+	case RegisterUDPPacket:
+		RegisterConnectionUDP(conn, packet.Payload)
+	case PlayerPacket:
+		fmt.Print("Sending Player Data")
+		if GLobby.ClientsUDP[conn] != nil {
+			client := GLobby.ClientsUDP[conn]
+			ReplicatePlayer(client, data)
 		}
+	case ActorPacket:
+		if GLobby.ClientsUDP[conn] != nil {
+			client := GLobby.ClientsUDP[conn]
+			ReplicateActor(client, conn, packet.Payload)
+		}
+	case ObjectPacket:
+		if GLobby.ClientsUDP[conn] != nil {
+			client := GLobby.ClientsUDP[conn]
+			ReplicateObject(client, conn, packet.Payload)
+		}
+	default:
+		fmt.Println("Unknown UDP packet type received: ", packet.Type)
+	}
 }

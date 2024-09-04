@@ -3,12 +3,12 @@ package main
 import (
 	"fmt"
 	"io"
+	"math/rand"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
-	"math/rand"
-	"strconv"
 )
 
 const MaxPlayerSlots = 8
@@ -17,23 +17,23 @@ const lockInTimer = 3 // Players are locked in with their choices
 var SelectedCourse = 0
 
 type Client struct {
-	Conn     net.Conn
-	UDPAddr net.UDPAddr
+	Conn      net.Conn
+	UDPAddr   net.UDPAddr
 	NetClient NetworkClient // NetworkClient gets sent to users
-	Username string
-	Slot int
-	IsPlayer bool // Observer if false
-	Ready bool
-	Course int
+	Username  string
+	Slot      int
+	IsPlayer  bool // Observer if false
+	Ready     bool
+	Course    int
 	Character int
-	Loaded bool
+	Loaded    bool
 }
 
 type NetworkClient struct { // For sending to the clients
-	Username string
-	Slot int
-	IsPlayer bool
-	IsAI bool
+	Username  string
+	Slot      int
+	IsPlayer  bool
+	IsAI      bool
 	Character int
 	/* Does the client own this client?
 	 * This is important so that the client knows which player it is controlling
@@ -44,26 +44,26 @@ type NetworkClient struct { // For sending to the clients
 }
 
 type Lobby struct {
-	Clients map[net.Conn]*Client
-	ClientsUDP map[net.UDPConn]*Client
-	VacantSlots []int // Slots that were occupied but are now vacant
-	Mutex   sync.Mutex
-	PlayerCount int
+	Clients          map[net.Conn]*Client
+	ClientsUDP       map[net.UDPConn]*Client
+	VacantSlots      []int // Slots that were occupied but are now vacant
+	Mutex            sync.Mutex
+	PlayerCount      int
 	UniqueCharacters bool
 	CountdownStarted bool
-	LockedIn bool
-	StartSession bool
+	LockedIn         bool
+	StartSession     bool
 }
 
 var GLobby = Lobby{
-	Clients: make(map[net.Conn]*Client, 0),
-	ClientsUDP: make(map[net.UDPConn]*Client, 0),
-	VacantSlots: make([]int, 0),
-	PlayerCount: 0,
+	Clients:          make(map[net.Conn]*Client, 0),
+	ClientsUDP:       make(map[net.UDPConn]*Client, 0),
+	VacantSlots:      make([]int, 0),
+	PlayerCount:      0,
 	UniqueCharacters: false,
 	CountdownStarted: false,
-	LockedIn: false,
-	StartSession: false,
+	LockedIn:         false,
+	StartSession:     false,
 }
 
 func CreateString(r io.Reader) (string, error) {
@@ -89,10 +89,10 @@ func Join(conn net.Conn, username string) {
 	defer GLobby.Mutex.Unlock()
 
 	// Too late, the game is already starting
-	if (GLobby.LockedIn) {
+	if GLobby.LockedIn {
 		return
 	}
-	
+
 	if _, exists := GLobby.Clients[conn]; exists {
 		fmt.Println("Client already exists")
 		return
@@ -108,7 +108,7 @@ func Join(conn net.Conn, username string) {
 	client.Conn = conn
 	client.Username = username
 	client.Ready = false
-	
+
 	// Max slots, assign observer role
 	if GLobby.PlayerCount >= MaxPlayerSlots {
 		client.IsPlayer = false
@@ -116,24 +116,24 @@ func Join(conn net.Conn, username string) {
 		GLobby.Clients[conn] = &client
 		BroadcastStringTCP(message)
 		return
-		} else { // Assign player slot to the new client
+	} else { // Assign player slot to the new client
 		client.IsPlayer = true
-		
+
 		var slot int
 		if len(GLobby.VacantSlots) > 0 {
 			// Assign the first available slot
 			slot = GLobby.VacantSlots[0]
 			GLobby.VacantSlots = GLobby.VacantSlots[1:]
-			} else {
-				// Assign a new slot
-				slot = GLobby.PlayerCount
+		} else {
+			// Assign a new slot
+			slot = GLobby.PlayerCount
 		}
 		GLobby.PlayerCount++
-		
+
 		client.Slot = slot
 		GLobby.Clients[conn] = &client
 
-		message := fmt.Sprintf("%s joined slot %d! Hello!", username, slot + 1)
+		message := fmt.Sprintf("%s joined slot %d! Hello!", username, slot+1)
 		BroadcastStringTCP(message)
 	}
 
@@ -144,10 +144,10 @@ func JoinUDP(conn net.Conn, value []byte) {
 	defer GLobby.Mutex.Unlock()
 
 	for _, client := range GLobby.Clients {
-		if (client.Conn == conn) {
-			fmt.Printf("Recorded UDP addr for %s\n", client.Username);
-			client.UDPAddr.IP = net.ParseIP(string(uint32(value[0])));
-			client.UDPAddr.Port = int(uint16(value[4]));
+		if client.Conn == conn {
+			fmt.Printf("Recorded UDP addr for %s\n", client.Username)
+			client.UDPAddr.IP = net.ParseIP(string(uint32(value[0])))
+			client.UDPAddr.Port = int(uint16(value[4]))
 		}
 	}
 }
@@ -157,39 +157,49 @@ func RegisterConnectionUDP(conn net.UDPConn, value []byte) {
 	defer GLobby.Mutex.Unlock()
 
 	for _, client := range GLobby.Clients {
-		if (client.UDPAddr.String() == conn.RemoteAddr().String()) {
-			fmt.Printf("Successfully registered %s on the UDP server", client.Username);
+		if client.UDPAddr.IP == nil {
+			continue
+		}
+		if client.UDPAddr.String() == conn.RemoteAddr().String() {
+			fmt.Printf("Successfully registered %s on the UDP server", client.Username)
 			GLobby.ClientsUDP[conn] = client
 		}
 	}
 }
 
 func SetCharacter(conn net.Conn, value []byte) {
-	if GLobby.Clients[conn].IsPlayer {
-		character := int(value[0])
+	c := GLobby.Clients[conn]
 
-		if GLobby.UniqueCharacters {
-			for _, client := range GLobby.Clients {
-				if client.Conn == conn {
-					continue // Skip self
-				}
-				if client.Character == character {
-					SendMessageToPlayer(client, "This character has already been chosen")
-					return
-				}
+	if c == nil || !c.IsPlayer {
+		return
+	}
+	character := int(value[0])
+
+	if GLobby.UniqueCharacters {
+		for _, client := range GLobby.Clients {
+			if client.Conn == conn {
+				continue // Skip self
 			}
-			GLobby.Clients[conn].Character = character
-		} else { // Players can choose the same characters
-			GLobby.Clients[conn].Character = character
-
-			SendMessageToPlayer(GLobby.Clients[conn], "Chosen character: "+strconv.Itoa(int(character)))
+			if client.Character == character {
+				SendMessageToPlayer(client, "This character has already been chosen")
+				return
+			}
 		}
+		GLobby.Clients[conn].Character = character
+	} else { // Players can choose the same characters
+		GLobby.Clients[conn].Character = character
+
+		SendMessageToPlayer(GLobby.Clients[conn], "Chosen character: "+strconv.Itoa(int(character)))
 	}
 }
 
 func CupVote(conn net.Conn, value []byte) {
-	if GLobby.Clients[conn].IsPlayer {
-		GLobby.Clients[conn].Course = int(value[0])
+	client := GLobby.Clients[conn]
+
+	if client != nil {
+		if client.IsPlayer {
+			GLobby.Clients[conn].Course = int(value[0])
+		}
 	}
 }
 
@@ -207,7 +217,7 @@ func ReadyUp(conn net.Conn, value []byte) {
 		for _, client := range GLobby.Clients {
 			if client.IsPlayer {
 				if client.Ready {
-					count++;
+					count++
 				}
 				currentPlayers++
 			}
@@ -221,21 +231,21 @@ func ReadyUp(conn net.Conn, value []byte) {
 
 func StartCountdown() {
 	// The countdown or session is already in-progress
-	if (GLobby.CountdownStarted || GLobby.StartSession || GLobby.LockedIn) {
-		return;
+	if GLobby.CountdownStarted || GLobby.StartSession || GLobby.LockedIn {
+		return
 	}
 	GLobby.CountdownStarted = true
 	timer := time.NewTimer(countDownTimer * time.Second)
-	fmt.Printf("Starting countdown %ds\n", countDownTimer);
+	fmt.Printf("Starting countdown %ds\n", countDownTimer)
 	<-timer.C
 
 	GLobby.LockedIn = true
 
-	fmt.Printf("Final countdown %ds\n", lockInTimer);
-	
+	fmt.Printf("Final countdown %ds\n", lockInTimer)
+
 	timer2 := time.NewTimer(lockInTimer * time.Second)
 	SelectCourse()
-	BroadcastPlayerSlots();
+	BroadcastPlayerSlots()
 	<-timer2.C
 	GLobby.StartSession = true
 	BroadcastPacket(StartSessionPacket)
@@ -273,7 +283,7 @@ func Loaded(conn net.Conn) {
 
 	for _, client := range GLobby.Clients {
 		// Return if not all clients are done loading. Including observers
-		if (client.Loaded == false) {
+		if client.Loaded == false {
 			return
 		}
 	}
@@ -290,17 +300,16 @@ func Leave(conn net.Conn) {
 		return // Client not found
 	}
 
-	
 	// Find and remove slot
 	if client.IsPlayer {
-		message := fmt.Sprintf("%s left, freeing slot %d", client.Username, client.Slot + 1)
+		message := fmt.Sprintf("%s left, freeing slot %d", client.Username, client.Slot+1)
 		GLobby.VacantSlots = append(GLobby.VacantSlots, client.Slot)
 		GLobby.PlayerCount--
 		//fmt.Printf("%s left, freeing slot %d\n", client.Username, client.Slot + 1)
-		BroadcastStringTCP(message);
+		BroadcastStringTCP(message)
 	} else {
 		message := fmt.Sprintf("Observer %s left", client.Username)
-		BroadcastStringTCP(message);
+		BroadcastStringTCP(message)
 	}
 	delete(GLobby.Clients, conn)
 }
@@ -313,7 +322,6 @@ func Message(conn net.Conn, message string) {
 	if !ok {
 		return // Client not found
 	}
-	msg := fmt.Sprintf("%s: %s", client.Username, message);
-	BroadcastStringTCP(msg);
+	msg := fmt.Sprintf("%s: %s", client.Username, message)
+	BroadcastStringTCP(msg)
 }
-
