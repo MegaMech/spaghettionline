@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
+
+	"github.com/google/uuid"
 )
 
 const (
 	// TCP Packets
-	JoinPacket = iota
-	JoinPacketUDP
+	JoinPacket       = iota
+	identifierPacket // Send unique identifier
 	LeavePacket
 	MessagePacket
 	LoadedPacket
@@ -30,6 +32,8 @@ const (
 
 type Packet struct {
 	Type    uint8
+	Id      uuid.UUID
+	Size    uint16
 	Payload []byte
 }
 

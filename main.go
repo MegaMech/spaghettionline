@@ -62,7 +62,7 @@ func startUDPServer(port string) {
 			fmt.Println("Error reading UDP message:", err)
 			continue
 		}
-		go HandleUDPConnection(*conn, addr, buffer[:n])
+		go HandleUDPConnection(conn, addr, buffer[:n])
 	}
 }
 
@@ -124,8 +124,6 @@ func handleTLV(conn net.Conn, packetType uint8, value []byte) {
 	switch packetType {
 	case JoinPacket:
 		Join(conn, string(value))
-	case JoinPacketUDP:
-		JoinUDP(conn, value)
 	case LeavePacket:
 		Leave(conn)
 	case MessagePacket:
@@ -159,7 +157,7 @@ func handleTLV(conn net.Conn, packetType uint8, value []byte) {
 // 	return nil, false
 // }
 
-func HandleUDPConnection(conn net.UDPConn, addr *net.UDPAddr, data []byte) {
+func HandleUDPConnection(conn *net.UDPConn, addr *net.UDPAddr, data []byte) {
 	//fmt.Printf("Received UDP message from %s: 0x%X\n", addr, data)
 
 	// Make sure the UDP client has already done a TCP handshake.
@@ -170,26 +168,26 @@ func HandleUDPConnection(conn net.UDPConn, addr *net.UDPAddr, data []byte) {
 	// }
 
 	packet := ParsePacket(data)
-	fmt.Printf("packet type %d\n", packet.Type)
+
+	id := packet.Id
+
+	client := GLobby.UUIDs[id]
+
+	if client == nil {
+		fmt.Printf("client is nil %s\n", id)
+		return
+	}
+
+	fmt.Printf("packet type %d %s\n", packet.Type, id)
 	switch packet.Type {
 	case RegisterUDPPacket:
-		RegisterConnectionUDP(conn, packet.Payload)
+		RegisterConnectionUDP(conn, addr, id)
 	case PlayerPacket:
-		fmt.Print("Sending Player Data")
-		if GLobby.ClientsUDP[conn] != nil {
-			client := GLobby.ClientsUDP[conn]
-			ReplicatePlayer(client, data)
-		}
+		ReplicatePlayer(client, conn, packet.Payload)
 	case ActorPacket:
-		if GLobby.ClientsUDP[conn] != nil {
-			client := GLobby.ClientsUDP[conn]
-			ReplicateActor(client, conn, packet.Payload)
-		}
+		ReplicateActor(client, conn, packet.Payload)
 	case ObjectPacket:
-		if GLobby.ClientsUDP[conn] != nil {
-			client := GLobby.ClientsUDP[conn]
-			ReplicateObject(client, conn, packet.Payload)
-		}
+		ReplicateObject(client, conn, packet.Payload)
 	default:
 		fmt.Println("Unknown UDP packet type received: ", packet.Type)
 	}

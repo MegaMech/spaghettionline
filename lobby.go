@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 const MaxPlayerSlots = 8
@@ -18,7 +20,9 @@ var SelectedCourse = 0
 
 type Client struct {
 	Conn      net.Conn
-	UDPAddr   net.UDPAddr
+	ConnUDP   *net.UDPConn
+	addr      *net.UDPAddr
+	id        uuid.UUID
 	NetClient NetworkClient // NetworkClient gets sent to users
 	Username  string
 	Slot      int
@@ -45,7 +49,8 @@ type NetworkClient struct { // For sending to the clients
 
 type Lobby struct {
 	Clients          map[net.Conn]*Client
-	ClientsUDP       map[net.UDPConn]*Client
+	ClientsUDP       map[*net.UDPConn]*Client
+	UUIDs            map[uuid.UUID]*Client
 	VacantSlots      []int // Slots that were occupied but are now vacant
 	Mutex            sync.Mutex
 	PlayerCount      int
@@ -57,7 +62,8 @@ type Lobby struct {
 
 var GLobby = Lobby{
 	Clients:          make(map[net.Conn]*Client, 0),
-	ClientsUDP:       make(map[net.UDPConn]*Client, 0),
+	ClientsUDP:       make(map[*net.UDPConn]*Client, 0),
+	UUIDs:            make(map[uuid.UUID]*Client, 0),
 	VacantSlots:      make([]int, 0),
 	PlayerCount:      0,
 	UniqueCharacters: false,
@@ -112,11 +118,18 @@ func Join(conn net.Conn, username string) {
 	// Max slots, assign observer role
 	if GLobby.PlayerCount >= MaxPlayerSlots {
 		client.IsPlayer = false
-		message := fmt.Sprintf("%s joined as an observer! Hello!", username)
+
+		uuidData := uuid.New()
+		client.id = uuidData
+
+		GLobby.UUIDs[uuidData] = &client
 		GLobby.Clients[conn] = &client
+
+		BroadcastBinaryTCP(conn, identifierPacket, uuidData[:])
+		message := fmt.Sprintf("%s joined as an observer! Hello!", username)
 		BroadcastStringTCP(message)
 		return
-	} else { // Assign player slot to the new client
+	} else { // Assign player role and select an empty slot for the client
 		client.IsPlayer = true
 
 		var slot int
@@ -128,10 +141,18 @@ func Join(conn net.Conn, username string) {
 			// Assign a new slot
 			slot = GLobby.PlayerCount
 		}
+
 		GLobby.PlayerCount++
 
 		client.Slot = slot
+
+		uuidData := uuid.New()
+		client.id = uuidData
+
+		GLobby.UUIDs[uuidData] = &client
 		GLobby.Clients[conn] = &client
+
+		SendBinaryTCP(conn, identifierPacket, uuidData[:])
 
 		message := fmt.Sprintf("%s joined slot %d! Hello!", username, slot+1)
 		BroadcastStringTCP(message)
@@ -139,32 +160,21 @@ func Join(conn net.Conn, username string) {
 
 }
 
-func JoinUDP(conn net.Conn, value []byte) {
+func RegisterConnectionUDP(conn *net.UDPConn, addr *net.UDPAddr, id uuid.UUID) {
 	GLobby.Mutex.Lock()
 	defer GLobby.Mutex.Unlock()
 
-	for _, client := range GLobby.Clients {
-		if client.Conn == conn {
-			fmt.Printf("Recorded UDP addr for %s\n", client.Username)
-			client.UDPAddr.IP = net.ParseIP(string(uint32(value[0])))
-			client.UDPAddr.Port = int(uint16(value[4]))
-		}
-	}
-}
+	client := GLobby.UUIDs[id]
 
-func RegisterConnectionUDP(conn net.UDPConn, value []byte) {
-	GLobby.Mutex.Lock()
-	defer GLobby.Mutex.Unlock()
-
-	for _, client := range GLobby.Clients {
-		if client.UDPAddr.IP == nil {
-			continue
-		}
-		if client.UDPAddr.String() == conn.RemoteAddr().String() {
-			fmt.Printf("Successfully registered %s on the UDP server", client.Username)
-			GLobby.ClientsUDP[conn] = client
-		}
+	if client != nil {
+		client.ConnUDP = conn
+		client.addr = addr
+		GLobby.ClientsUDP[conn] = client
+		fmt.Printf("Registered UDP Client\n")
+	} else {
+		fmt.Printf("Failed to register UDP Client\n")
 	}
+
 }
 
 func SetCharacter(conn net.Conn, value []byte) {
